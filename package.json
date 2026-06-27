@@ -1,7 +1,6 @@
 {
   "name": "@markup-carve/vite-plugin-carve",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Vite plugin for importing Carve documents as rendered HTML",
   "license": "MIT",
