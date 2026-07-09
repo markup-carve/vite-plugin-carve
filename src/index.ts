@@ -6,7 +6,7 @@ export interface CarvePluginOptions {
   render?: ParseOptions & RenderOptions
 }
 
-const DEFAULT_INCLUDE = /\.(?:crv|carve)$/
+const DEFAULT_INCLUDE = /\.crv$/
 
 export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
   const include = options.include ?? DEFAULT_INCLUDE

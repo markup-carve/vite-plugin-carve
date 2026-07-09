@@ -1,6 +1,6 @@
 # vite-plugin-carve
 
-Vite plugin for importing `.crv` and `.carve` documents as rendered HTML.
+Vite plugin for importing `.crv` documents as rendered HTML.
 
 ```ts
 import { defineConfig } from 'vite'
