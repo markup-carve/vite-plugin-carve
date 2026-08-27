@@ -4,6 +4,10 @@
   "type": "module",
   "description": "Vite plugin for importing Carve documents as rendered HTML",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/markup-carve/vite-plugin-carve"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
