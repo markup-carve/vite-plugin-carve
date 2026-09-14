@@ -22,8 +22,4 @@ The default export is rendered HTML. Named exports:
 
 ## Development
 
-```bash
-npm install
-npm run build
-npm test
-```
+Contributor setup, testing, and maintenance notes are in the [development guide](docs/development.md).
