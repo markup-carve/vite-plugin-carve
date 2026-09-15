@@ -20,6 +20,11 @@ The default export is rendered HTML. Named exports:
 - `html`
 - `source`
 
+File-backed modules expand `{{ path }}` directives by default. Paths resolve
+relative to the document and cannot escape Vite's project root. Set
+`includes: false` to leave directives literal, or set `includeRoot` to another
+containment root.
+
 ## Development
 
 Contributor setup, testing, and maintenance notes are in the [development guide](docs/development.md).
