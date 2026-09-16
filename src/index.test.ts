@@ -48,3 +48,14 @@ test('expands contained includes and watches their files', async () => {
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('refuses a relative include root instead of rooting it at the cwd', async () => {
+  const plugin = carvePlugin({ includeRoot: '..' })
+  const hook = plugin.transform
+  assert.ok(hook)
+  const fn = typeof hook === 'function' ? hook : hook.handler
+  await assert.rejects(
+    async () => fn.call({ addWatchFile() {}, warn() {} } as never, '{{ shared.crv }}', '/tmp/pages/index.crv'),
+    /absolute path/,
+  )
+})

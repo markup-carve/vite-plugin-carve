@@ -1,4 +1,4 @@
-import { resolve as resolvePath } from 'node:path'
+import { dirname as dirnamePath, resolve as resolvePath } from 'node:path'
 import {
   carveToHtml,
   expandIncludes,
@@ -24,7 +24,10 @@ const DEFAULT_INCLUDE = /\.crv$/
 
 export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
   const include = options.include ?? DEFAULT_INCLUDE
-  let projectRoot = process.cwd()
+  // Undefined until Vite resolves its config, so a transform that somehow runs
+  // first falls back to the document's own directory rather than to the process
+  // working directory, which I10 forbids as a containment root.
+  let projectRoot: string | undefined
 
   return {
     name: 'vite-plugin-carve',
@@ -38,7 +41,10 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
 
       let html: string
       if (options.includes ?? true) {
-        const root = resolvePath(options.includeRoot ?? projectRoot)
+        // A configured root reaches the resolver unchanged, so its absolute-path
+        // refusal (PART 9 section 19, I10) still fires. Resolving it here would
+        // root containment at the process working directory instead.
+        const root = options.includeRoot ?? projectRoot ?? dirnamePath(resolvePath(filename))
         const expanded = expandIncludes(parse(source, { ...options.render, positions: true }), source, {
           resolve: fileSystemResolver(root),
           sourcePath: resolvePath(filename),
