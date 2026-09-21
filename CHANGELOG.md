@@ -6,16 +6,19 @@ Rendering is done by the Carve engine (`@markup-carve/carve`), so an engine
 change can alter output with no plugin diff. Engine bumps therefore get an
 entry of their own.
 
-## Unreleased
+## 0.1.1 - 2026-09-21
 
-### Fixed
+### Added
 
-- `package.json` is importable, so the installed version can be read back
-  (#10). The subpath was not in `exports`, so reading it threw
-  `ERR_PACKAGE_PATH_NOT_EXPORTED` - which reads as the package being absent
-  rather than the subpath being closed. Reachable through a git install
-  already, not only at the first publish. Only that one file is opened; every
-  other path stays refused.
+- `{{ path }}` include directives in imported `.crv` documents now expand,
+  resolved relative to the document and contained to Vite's project root.
+  `includes: false` leaves them literal, and `includeRoot` sets an absolute
+  containment root (#18).
+
+### Changed
+
+- Requires `@markup-carve/carve` 0.1.7 (`^0.1.7`), the first release carrying
+  contained include expansion (#20).
 
 ## 0.1.0 - 2026-08-18
 
@@ -26,6 +29,8 @@ First release.
 - Vite plugin importing `.crv` documents as rendered HTML modules. The default
   export is the HTML; `html` and `source` are named exports.
 - Vite 5 and 6 are accepted as a peer dependency.
+- `package.json` is importable through `exports`, so the installed version can
+  be read back (#10).
 
 ### Security
 
