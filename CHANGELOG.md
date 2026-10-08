@@ -14,14 +14,14 @@ entry of their own.
   code and source position. Rendering went through `renderDocument` and
   `carveToHtml`, which return a string and drop the report, so a blanked
   `javascript:` destination, a flattened ruby annotation or a raw block for
-  another format left no trace in the build log.
+  another format left no trace in the build log (#27).
 
 ### Fixed
 
 - The published tarball no longer carries the compiled test files. `npm test`
   runs them out of `dist`, so `files: ["dist"]` shipped nine test, map and
   declaration files to every consumer, two thirds of the tarball, one of which
-  spawns child processes. A packaging test reads `npm pack --dry-run` back.
+  spawns child processes. A packaging test reads `npm pack --dry-run` back (#26).
 
 ### Changed
 
@@ -30,7 +30,7 @@ entry of their own.
   run the engine a consumer installs. Two engine behaviors the plugin's own
   transform reaches now have tests: a case-only cross-reference stays literal,
   and an include renames every colliding id rather than only a heading id.
-  Renovate keeps the range and the lockfile moving from here.
+  Renovate keeps the range and the lockfile moving from here (#26).
 
 ## 0.1.1 - 2026-09-21
 
