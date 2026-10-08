@@ -8,6 +8,14 @@ entry of their own.
 
 ## [Unreleased]
 
+### Added
+
+- A render loss the engine records is forwarded as a Vite warning carrying its
+  code and source position. Rendering went through `renderDocument` and
+  `carveToHtml`, which return a string and drop the report, so a blanked
+  `javascript:` destination, a flattened ruby annotation or a raw block for
+  another format left no trace in the build log.
+
 ### Fixed
 
 - The published tarball no longer carries the compiled test files. `npm test`

@@ -60,3 +60,22 @@ test('an include renames every colliding id, not only a heading id', async () =>
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('a blanked destination scheme reaches the Vite log', async () => {
+  // The engine blanks `javascript:` either way; without the report the author
+  // only sees a link that stopped working, with no position.
+  for (const includes of [true, false]) {
+    const warnings: string[] = []
+    const code = await render(
+      carvePlugin({ includes }),
+      '[x](javascript:alert(1))\n',
+      '/tmp/x.crv',
+      { warn: (message: string) => warnings.push(message) },
+    )
+
+    assert.match(code, /href=\\"\\"/)
+    assert.deepEqual(warnings, [
+      'Blanked a denied destination scheme [destination-denied] (line 1, column 1)',
+    ])
+  }
+})
