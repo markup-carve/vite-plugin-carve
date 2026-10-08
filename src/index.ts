@@ -1,12 +1,13 @@
 import { dirname as dirnamePath, resolve as resolvePath } from 'node:path'
 import {
-  carveToHtml,
+  carveToHtmlWithReport,
   expandIncludes,
   parse,
-  renderDocument,
+  renderDocumentWithReport,
   resolve,
   type RenderOptions,
   type ParseOptions,
+  type RenderResult,
 } from '@markup-carve/carve'
 import { fileSystemResolver } from '@markup-carve/carve/node'
 import type { Plugin } from 'vite'
@@ -21,6 +22,22 @@ export interface CarvePluginOptions {
 }
 
 const DEFAULT_INCLUDE = /\.crv$/
+
+/**
+ * A render loss is the engine saying it dropped something the author wrote - a
+ * blanked `javascript:` destination, a flattened ruby annotation, a raw block
+ * for another format. Without this the output just quietly lacks it.
+ */
+function report(ctx: { warn: (message: string) => void }, result: RenderResult): string {
+  for (const loss of result.losses) {
+    const at = loss.pos ? ` (line ${loss.pos.startLine}, column ${loss.pos.startColumn})` : ''
+    ctx.warn(`${loss.message} [${loss.code}]${at}`)
+  }
+  if (result.truncated) {
+    ctx.warn(`${result.totalLosses} render losses in total; the rest were not reported`)
+  }
+  return result.value
+}
 
 export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
   const include = options.include ?? DEFAULT_INCLUDE
@@ -54,9 +71,9 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
           if (dependency.resolved) this.addWatchFile(dependency.id)
         }
         for (const warning of expanded.warnings) this.warn(warning.message)
-        html = renderDocument(resolve(expanded.doc), options.render ?? {})
+        html = report(this, renderDocumentWithReport(resolve(expanded.doc), options.render ?? {}))
       } else {
-        html = carveToHtml(source, options.render ?? {})
+        html = report(this, carveToHtmlWithReport(source, options.render ?? {}))
       }
       return {
         code: [
