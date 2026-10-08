@@ -89,3 +89,24 @@ test('opens that one file and not the directory holding it', () => {
 test('still resolves the entry point the map already named', () => {
   assert.equal(codeOf(manifest.name), 'RESOLVED')
 })
+
+test('publishes no compiled test files', () => {
+  // `npm test` runs the compiled tests out of `dist`, so a plain `files: ["dist"]`
+  // shipped nine test, map and declaration files to every consumer - two thirds
+  // of the tarball, one of which spawns child processes.
+  const packed = JSON.parse(
+    execFileSync(process.execPath, [process.env.npm_execpath ?? 'npm', 'pack', '--dry-run', '--json'], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }),
+  ) as Array<{ files: Array<{ path: string }> }>
+
+  const paths = packed[0]?.files.map((file) => file.path) ?? []
+  assert.ok(paths.length, 'npm pack reported no files')
+  assert.deepEqual(
+    paths.filter((path) => /\.test\./.test(path)),
+    [],
+  )
+  assert.ok(paths.includes('dist/index.js'))
+})
