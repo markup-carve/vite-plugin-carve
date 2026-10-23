@@ -2,12 +2,14 @@ import { dirname as dirnamePath, resolve as resolvePath } from 'node:path'
 import {
   carveToHtmlWithReport,
   expandIncludes,
+  lintCarve,
   parse,
   renderDocumentWithReport,
   resolve,
   type RenderOptions,
   type ParseOptions,
   type RenderResult,
+  type LintWarning,
 } from '@markup-carve/carve'
 import { fileSystemResolver } from '@markup-carve/carve/node'
 import type { Plugin } from 'vite'
@@ -19,6 +21,8 @@ export interface CarvePluginOptions {
   includes?: boolean
   /** Include containment root. Defaults to Vite's project root. */
   includeRoot?: string
+  /** Report `lintCarve` findings as Vite warnings. Off by default. */
+  lint?: boolean
 }
 
 const DEFAULT_INCLUDE = /\.crv$/
@@ -39,6 +43,11 @@ function report(ctx: { warn: (message: string) => void }, result: RenderResult):
   return result.value
 }
 
+function lintMessage(warning: LintWarning): string {
+  const file = warning.file ? `${warning.file}, ` : ''
+  return `${warning.message} [${warning.rule}] (${file}line ${warning.line}, column ${warning.column})`
+}
+
 export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
   const include = options.include ?? DEFAULT_INCLUDE
   // Undefined until Vite resolves its config, so a transform that somehow runs
@@ -57,23 +66,35 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
       if (!filename || !include.test(filename)) return null
 
       let html: string
+      const reported = new Set<string>()
+      let lintIncludes: NonNullable<Parameters<typeof lintCarve>[1]>['includes']
       if (options.includes ?? true) {
         // A configured root reaches the resolver unchanged, so its absolute-path
         // refusal (PART 9 section 19, I10) still fires. Resolving it here would
         // root containment at the process working directory instead.
         const root = options.includeRoot ?? projectRoot ?? dirnamePath(resolvePath(filename))
+        lintIncludes = { resolve: fileSystemResolver(root), sourcePath: resolvePath(filename) }
         const expanded = expandIncludes(parse(source, { ...options.render, positions: true }), source, {
-          resolve: fileSystemResolver(root),
-          sourcePath: resolvePath(filename),
+          ...lintIncludes,
           extensions: options.render?.extensions,
         })
         for (const dependency of expanded.dependencies) {
           if (dependency.resolved) this.addWatchFile(dependency.id)
         }
-        for (const warning of expanded.warnings) this.warn(warning.message)
+        for (const warning of expanded.warnings) {
+          reported.add(`${warning.rule}\0${warning.message}`)
+          this.warn(warning.message)
+        }
         html = report(this, renderDocumentWithReport(resolve(expanded.doc), options.render ?? {}))
       } else {
         html = report(this, carveToHtmlWithReport(source, options.render ?? {}))
+      }
+      if (options.lint) {
+        const findings = lintCarve(source, { includes: lintIncludes, extensions: options.render?.extensions })
+        // Include failures were already reported by the expansion above.
+        for (const finding of findings) {
+          if (!reported.has(`${finding.rule}\0${finding.message}`)) this.warn(lintMessage(finding))
+        }
       }
       return {
         code: [

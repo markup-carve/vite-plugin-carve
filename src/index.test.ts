@@ -59,3 +59,82 @@ test('refuses a relative include root instead of rooting it at the cwd', async (
     /absolute path/,
   )
 })
+
+test('includes only the named region of a file', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'vite-carve-region-'))
+  try {
+    writeFileSync(join(root, 'shared.crv'), 'Before.\n\n%% #region intro\nInside the region.\n%% #endregion\n\nAfter.\n')
+    const warnings: string[] = []
+    const plugin = carvePlugin({ includeRoot: root })
+    const hook = plugin.transform
+    assert.ok(hook)
+    const fn = typeof hook === 'function' ? hook : hook.handler
+    const result = await fn.call(
+      { addWatchFile() {}, warn: (m: string) => warnings.push(m) } as never,
+      '{{ shared.crv @region:intro }}',
+      join(root, 'index.crv'),
+    )
+    assert.ok(result && typeof result !== 'string')
+    assert.match(result.code ?? '', /Inside the region\./)
+    assert.doesNotMatch(result.code ?? '', /Before\.|After\./)
+    assert.deepEqual(warnings, [])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('includes a named region of a source file as a code block', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'vite-carve-code-region-'))
+  try {
+    const file = join(root, 'example.ts')
+    writeFileSync(file, 'import x from "y"\n// #region demo\nconst a = 1\n// #endregion\nexport {}\n')
+    const watched: string[] = []
+    const plugin = carvePlugin({ includeRoot: root })
+    const hook = plugin.transform
+    assert.ok(hook)
+    const fn = typeof hook === 'function' ? hook : hook.handler
+    const result = await fn.call(
+      { addWatchFile: (f: string) => watched.push(f), warn() {} } as never,
+      '{{ example.ts @region:demo @code:ts }}',
+      join(root, 'index.crv'),
+    )
+    assert.ok(result && typeof result !== 'string')
+    assert.match(result.code ?? '', /<pre><code class=\\"language-ts\\">const a = 1\\n<\/code><\/pre>/)
+    assert.deepEqual(watched, [file])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+async function warningsFor(options: Parameters<typeof carvePlugin>[0], source: string, id: string) {
+  const plugin = carvePlugin(options)
+  const hook = plugin.transform
+  assert.ok(hook)
+  const fn = typeof hook === 'function' ? hook : hook.handler
+  const warnings: string[] = []
+  await fn.call({ addWatchFile() {}, warn: (m: string) => warnings.push(m) } as never, source, id)
+  return warnings
+}
+
+test('reports lint findings as warnings when lint is enabled', async () => {
+  const warnings = await warningsFor({ lint: true, includes: false }, 'See [x](#nope).\n', '/tmp/example.crv')
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0] ?? '', /\[broken-fragment-link\] \(line 1, column 5\)$/)
+})
+
+test('does not lint by default', async () => {
+  const warnings = await warningsFor({ includes: false }, 'See [x](#nope).\n', '/tmp/example.crv')
+  assert.deepEqual(warnings, [])
+})
+
+test('lints included files and reports an include failure once', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'vite-carve-lint-'))
+  try {
+    writeFileSync(join(root, 'shared.crv'), 'Bad [l](#zzz).\n')
+    const warnings = await warningsFor({ lint: true, includeRoot: root }, '{{ shared.crv }}\n\n{{ missing.crv }}\n', join(root, 'index.crv'))
+    assert.equal(warnings.filter((w) => w.includes('missing.crv')).length, 1)
+    assert.ok(warnings.some((w) => w.includes('[broken-fragment-link]') && w.includes(join(root, 'shared.crv'))))
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})

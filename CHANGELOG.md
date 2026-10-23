@@ -6,6 +6,19 @@ Rendering is done by the Carve engine (`@markup-carve/carve`), so an engine
 change can alter output with no plugin diff. Engine bumps therefore get an
 entry of their own.
 
+## Unreleased
+
+### Added
+
+- `lint: true` reports the engine's lint findings as Vite warnings, including
+  findings in included files. Off by default.
+- An include directive can take one named region of a file; the README
+  documents the marker form.
+
+### Changed
+
+- Requires `@markup-carve/carve` 0.1.13 or later.
+
 ## 0.1.2 - 2026-10-08
 
 ### Added
