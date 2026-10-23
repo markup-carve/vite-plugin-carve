@@ -138,3 +138,22 @@ test('lints included files and reports an include failure once', async () => {
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('an include warning names the included file it arose in', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'vite-carve-nested-'))
+  try {
+    const shared = join(root, 'shared.crv')
+    writeFileSync(shared, 'Text.\n\n{{ missing.crv }}\n')
+    for (const lint of [false, true]) {
+      const warnings = await warningsFor({ lint, includeRoot: root }, '{{ shared.crv }}\n\n{{ gone.crv }}\n', join(root, 'index.crv'))
+      assert.deepEqual(warnings.filter((w) => w.includes('missing.crv')), [
+        `Include "missing.crv" could not be resolved. [include-unresolved] (${shared}, line 3, column 1)`,
+      ])
+      assert.deepEqual(warnings.filter((w) => w.includes('gone.crv')), [
+        'Include "gone.crv" could not be resolved. [include-unresolved] (line 3, column 1)',
+      ])
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})

@@ -43,8 +43,11 @@ function report(ctx: { warn: (message: string) => void }, result: RenderResult):
   return result.value
 }
 
-function lintMessage(warning: LintWarning): string {
-  const file = warning.file ? `${warning.file}, ` : ''
+type Located = Pick<LintWarning, 'message' | 'rule' | 'line' | 'column' | 'file'>
+
+/** Names the file only when the finding is not in the document being imported. */
+function located(warning: Located, documentPath: string): string {
+  const file = warning.file && warning.file !== documentPath ? `${warning.file}, ` : ''
   return `${warning.message} [${warning.rule}] (${file}line ${warning.line}, column ${warning.column})`
 }
 
@@ -83,7 +86,7 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
         }
         for (const warning of expanded.warnings) {
           reported.add(`${warning.rule}\0${warning.message}`)
-          this.warn(warning.message)
+          this.warn(located(warning, resolvePath(filename)))
         }
         html = report(this, renderDocumentWithReport(resolve(expanded.doc), options.render ?? {}))
       } else {
@@ -93,7 +96,7 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
         const findings = lintCarve(source, { includes: lintIncludes, extensions: options.render?.extensions })
         // Include failures were already reported by the expansion above.
         for (const finding of findings) {
-          if (!reported.has(`${finding.rule}\0${finding.message}`)) this.warn(lintMessage(finding))
+          if (!reported.has(`${finding.rule}\0${finding.message}`)) this.warn(located(finding, resolvePath(filename)))
         }
       }
       return {
