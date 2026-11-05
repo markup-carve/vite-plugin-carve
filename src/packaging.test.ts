@@ -94,13 +94,17 @@ test('publishes no compiled test files', () => {
   // `npm test` runs the compiled tests out of `dist`, so a plain `files: ["dist"]`
   // shipped nine test, map and declaration files to every consumer - two thirds
   // of the tarball, one of which spawns child processes.
-  const packed = JSON.parse(
-    execFileSync(process.execPath, [process.env.npm_execpath ?? 'npm', 'pack', '--dry-run', '--json'], {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }),
-  ) as Array<{ files: Array<{ path: string }> }>
+  const output = execFileSync(process.execPath, [process.env.npm_execpath ?? 'npm', 'pack', '--dry-run', '--json'], {
+    cwd: root,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
+  // npm 12 prints `npm notice` lines before the JSON and keys it by package name
+  // instead of returning an array.
+  const parsed = JSON.parse(output.slice(output.search(/^[[{]/m))) as
+    | Array<{ files: Array<{ path: string }> }>
+    | Record<string, { files: Array<{ path: string }> }>
+  const packed = Array.isArray(parsed) ? parsed : Object.values(parsed)
 
   const paths = packed[0]?.files.map((file) => file.path) ?? []
   assert.ok(paths.length, 'npm pack reported no files')
