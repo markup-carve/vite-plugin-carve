@@ -22,7 +22,14 @@ export interface CarvePluginOptions {
   /** Include containment root. Defaults to Vite's project root. */
   includeRoot?: string
   /** Report `lintCarve` findings as Vite warnings. Off by default. */
-  lint?: boolean
+  lint?: boolean | CarveLintOptions
+}
+
+export interface CarveLintOptions {
+  /** Also report advisory `Hint` findings, such as a non-canonical thematic break. */
+  hints?: boolean
+  /** Opt-in authoring rules to run in addition to the defaults. */
+  enabledRules?: readonly string[]
 }
 
 const DEFAULT_INCLUDE = /\.crv$/
@@ -32,9 +39,11 @@ const DEFAULT_INCLUDE = /\.crv$/
  * blanked `javascript:` destination, a flattened ruby annotation, a raw block
  * for another format. Without this the output just quietly lacks it.
  */
-function report(ctx: { warn: (message: string) => void }, result: RenderResult): string {
+function report(ctx: { warn: (message: string) => void }, result: RenderResult, documentPath: string): string {
   for (const loss of result.losses) {
-    const at = loss.pos ? ` (line ${loss.pos.startLine}, column ${loss.pos.startColumn})` : ''
+    // A loss in included content carries the file its position is in.
+    const file = loss.file && loss.file !== documentPath ? `${loss.file}, ` : ''
+    const at = loss.pos ? ` (${file}line ${loss.pos.startLine}, column ${loss.pos.startColumn})` : ''
     ctx.warn(`${loss.message} [${loss.code}]${at}`)
   }
   if (result.truncated) {
@@ -67,6 +76,7 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
     transform(source, id) {
       const [filename] = id.split('?', 1)
       if (!filename || !include.test(filename)) return null
+      const documentPath = resolvePath(filename)
 
       let html: string
       const reported = new Set<string>()
@@ -76,7 +86,7 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
         // refusal (PART 9 section 19, I10) still fires. Resolving it here would
         // root containment at the process working directory instead.
         const root = options.includeRoot ?? projectRoot ?? dirnamePath(resolvePath(filename))
-        lintIncludes = { resolve: fileSystemResolver(root), sourcePath: resolvePath(filename) }
+        lintIncludes = { resolve: fileSystemResolver(root), sourcePath: documentPath }
         const expanded = expandIncludes(parse(source, { ...options.render, positions: true }), source, {
           ...lintIncludes,
           extensions: options.render?.extensions,
@@ -86,17 +96,23 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
         }
         for (const warning of expanded.warnings) {
           reported.add(`${warning.rule}\0${warning.message}`)
-          this.warn(located(warning, resolvePath(filename)))
+          this.warn(located(warning, documentPath))
         }
-        html = report(this, renderDocumentWithReport(resolve(expanded.doc), options.render ?? {}))
+        html = report(this, renderDocumentWithReport(resolve(expanded.doc), options.render ?? {}), documentPath)
       } else {
-        html = report(this, carveToHtmlWithReport(source, options.render ?? {}))
+        html = report(this, carveToHtmlWithReport(source, options.render ?? {}), documentPath)
       }
       if (options.lint) {
-        const findings = lintCarve(source, { includes: lintIncludes, extensions: options.render?.extensions })
-        // Include failures were already reported by the expansion above.
+        const lint = options.lint === true ? {} : options.lint
+        const findings = lintCarve(source, {
+          includes: lintIncludes,
+          extensions: options.render?.extensions,
+          enabledRules: lint.enabledRules,
+        })
         for (const finding of findings) {
-          if (!reported.has(`${finding.rule}\0${finding.message}`)) this.warn(located(finding, resolvePath(filename)))
+          if (finding.severity === 'Hint' && !lint.hints) continue
+          // Include failures were already reported by the expansion above.
+          if (!reported.has(`${finding.rule}\0${finding.message}`)) this.warn(located(finding, documentPath))
         }
       }
       return {
