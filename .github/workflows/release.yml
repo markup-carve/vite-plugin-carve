@@ -128,10 +128,28 @@ jobs:
             echo "  'no such package', so it is not treated as a verdict."
           fi
 
+  no-git-dependencies:
+    name: No dependency is installed over git
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # GATE. Main may pin a merged upstream commit between releases; a published
+      # manifest may not, because every consumer would then clone over git with no
+      # registry integrity check. src/engine-dependency.test.ts runs this script
+      # on every pull request.
+      - name: Every runtime dependency resolves from the registry
+        run: node scripts/no-git-dependencies.mjs
+
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [npm-credential, tag]
+    needs: [npm-credential, no-git-dependencies, tag]
     permissions:
       # `write`, not `read`, and the gate below is the whole reason: a DRAFT
       # release is invisible to a caller without push access, so under
@@ -255,7 +273,7 @@ jobs:
     name: Create the tag
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [npm-credential]
+    needs: [npm-credential, no-git-dependencies]
     environment: release
     permissions:
       contents: write

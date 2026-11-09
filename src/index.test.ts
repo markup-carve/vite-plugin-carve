@@ -157,3 +157,55 @@ test('an include warning names the included file it arose in', async () => {
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('leaves lint hints out unless they are asked for', async () => {
+  const source = 'Text.\n\n---\n\nMore.\n'
+  assert.deepEqual(await warningsFor({ lint: true, includes: false }, source, '/tmp/example.crv'), [])
+  assert.deepEqual(await warningsFor({ lint: { hints: true }, includes: false }, source, '/tmp/example.crv'), [
+    'This thematic break is written "---"; the canonical spelling is "***". [thematic-break-spelling] (line 3, column 1)',
+  ])
+})
+
+test('runs opt-in lint rules named in enabledRules', async () => {
+  const source = 'See [here](https://example.com).\n'
+  assert.deepEqual(await warningsFor({ lint: true, includes: false }, source, '/tmp/example.crv'), [])
+  const warnings = await warningsFor({ lint: { enabledRules: ['non-descriptive-link-text'] }, includes: false }, source, '/tmp/example.crv')
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0] ?? '', /\[non-descriptive-link-text\] \(line 1, column 5\)$/)
+})
+
+test('a render loss in an included file names that file', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'vite-carve-loss-'))
+  try {
+    const child = join(root, 'child.crv')
+    writeFileSync(child, 'A [bad](javascript:x) link.\n')
+    const warnings = await warningsFor({ includeRoot: root }, '[top](javascript:y)\n\n{{ child.crv }}\n', join(root, 'index.crv'))
+    assert.deepEqual(warnings, [
+      'Blanked a denied destination scheme [destination-denied] (line 1, column 1)',
+      `Blanked a denied destination scheme [destination-denied] (${child}, line 1, column 3)`,
+    ])
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('selects records and columns of a CSV table include', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'vite-carve-rows-'))
+  try {
+    writeFileSync(join(root, 'data.csv'), 'a,b\n1,2\n3,4\n5,6\n')
+    const hook = carvePlugin({ includeRoot: root }).transform
+    assert.ok(hook)
+    const fn = typeof hook === 'function' ? hook : hook.handler
+    const result = await fn.call(
+      { addWatchFile() {}, warn() {} } as never,
+      '{table}\n{{ data.csv @code:csv @rows:3-4 @cols:"b" }}\n',
+      join(root, 'index.crv'),
+    )
+    assert.ok(result && typeof result !== 'string')
+    assert.match(result.code ?? '', /<th scope=\\"col\\">b<\/th>/)
+    assert.match(result.code ?? '', /<td>4<\/td><\/tr>\\n    <tr><td>6<\/td>/)
+    assert.doesNotMatch(result.code ?? '', /<td>2<\/td>|>a</)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
