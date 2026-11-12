@@ -6,6 +6,24 @@ Rendering is done by the Carve engine (`@markup-carve/carve`), so an engine
 change can alter output with no plugin diff. Engine bumps therefore get an
 entry of their own.
 
+## 0.1.4 - 2026-11-12
+
+### Added
+
+- `lint: { enabledRules }` passes the engine's opt-in authoring rules through
+  to `lintCarve` (#39).
+- `lint: { hints: true }` also reports the engine's hint-severity findings,
+  such as `thematic-break-spelling`. They stay out of the build log by
+  default (#39).
+
+### Changed
+
+- Requires `@markup-carve/carve` 0.1.16 or later, now the published release
+  instead of a carve-js main commit (#39, #41).
+- A render loss in included content names the included file, like include
+  and lint warnings do; before, its line and column pointed into the importing
+  document (#39).
+
 ## 0.1.3 - 2026-10-23
 
 ### Added
