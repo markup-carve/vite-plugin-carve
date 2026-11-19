@@ -30,7 +30,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@markup-carve/carve": "github:markup-carve/carve-js#c1dca054d79cb501dc9df43fc8b11956df5ec345"
+    "@markup-carve/carve": "github:markup-carve/carve-js#11de2ad3652448277905e0980e72a49936139c0b"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
