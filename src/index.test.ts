@@ -22,6 +22,27 @@ test('renders crv modules to html exports', async () => {
   assert.match(result.code, /export default html/)
 })
 
+test('C2-H-137 routes 0.2 HTML options and keeps raw HTML off by default', async () => {
+  const source = '```=html\n<b>x</b>\n```'
+  const escaped = await transform(carvePlugin(), source, '/tmp/raw.crv')
+  const enabled = await transform(carvePlugin({ render: { rawHtml: true, sections: false } }), source, '/tmp/raw.crv')
+  assert.ok(escaped && typeof escaped !== 'string')
+  assert.ok(enabled && typeof enabled !== 'string')
+  assert.match(escaped.code ?? '', /&lt;b&gt;x&lt;\/b&gt;/)
+  assert.match(enabled.code ?? '', /<b>x<\/b>/)
+})
+
+test('C2-N-003 reports an unresolved directive when includes are disabled', async () => {
+  const warnings: string[] = []
+  const hook = carvePlugin({ includes: false }).transform
+  assert.ok(hook)
+  const fn = typeof hook === 'function' ? hook : hook.handler
+  const result = await fn.call({ warn: (message: string) => warnings.push(message) } as never, '{{ child.crv }}', '/tmp/entry.crv')
+  assert.ok(result && typeof result !== 'string')
+  assert.match(result.code ?? '', /child\.crv/)
+  assert.deepEqual(warnings.map((item) => item.match(/\[([^\]]+)\]/)?.[1]), ['include-no-resolver', 'include-unresolved'])
+})
+
 test('ignores non-carve modules', async () => {
   const plugin = carvePlugin()
   const result = await transform(plugin, '# Hello', '/tmp/example.md')
@@ -132,7 +153,8 @@ test('lints included files and reports an include failure once', async () => {
   try {
     writeFileSync(join(root, 'shared.crv'), 'Bad [l](#zzz).\n')
     const warnings = await warningsFor({ lint: true, includeRoot: root }, '{{ shared.crv }}\n\n{{ missing.crv }}\n', join(root, 'index.crv'))
-    assert.equal(warnings.filter((w) => w.includes('missing.crv')).length, 1)
+    // C2-N-061 reports the cause and the unresolved render loss separately.
+    assert.equal(warnings.filter((w) => w.includes('missing.crv')).length, 2)
     assert.ok(warnings.some((w) => w.includes('[broken-fragment-link]') && w.includes(join(root, 'shared.crv'))))
   } finally {
     rmSync(root, { recursive: true, force: true })
@@ -146,10 +168,13 @@ test('an include warning names the included file it arose in', async () => {
     writeFileSync(shared, 'Text.\n\n{{ missing.crv }}\n')
     for (const lint of [false, true]) {
       const warnings = await warningsFor({ lint, includeRoot: root }, '{{ shared.crv }}\n\n{{ gone.crv }}\n', join(root, 'index.crv'))
+      // C2-N-061: the parse cause precedes the render loss in 0.2.
       assert.deepEqual(warnings.filter((w) => w.includes('missing.crv')), [
+        `Include "missing.crv" was not expanded: the file does not exist. [include-not-found] (${shared}, line 3, column 1)`,
         `Include "missing.crv" could not be resolved. [include-unresolved] (${shared}, line 3, column 1)`,
       ])
       assert.deepEqual(warnings.filter((w) => w.includes('gone.crv')), [
+        'Include "gone.crv" was not expanded: the file does not exist. [include-not-found] (line 3, column 1)',
         'Include "gone.crv" could not be resolved. [include-unresolved] (line 3, column 1)',
       ])
     }
@@ -162,7 +187,8 @@ test('leaves lint hints out unless they are asked for', async () => {
   const source = 'Text.\n\n---\n\nMore.\n'
   assert.deepEqual(await warningsFor({ lint: true, includes: false }, source, '/tmp/example.crv'), [])
   assert.deepEqual(await warningsFor({ lint: { hints: true }, includes: false }, source, '/tmp/example.crv'), [
-    'This thematic break is written "---"; the canonical spelling is "***". [thematic-break-spelling] (line 3, column 1)',
+    // U-044 and C2-B-160: hyphens are text in 0.2.
+    'This line of "---" is text in Carve 0.2. Write "***" for a thematic break. [thematic-break-spelling] (line 3, column 1)',
   ])
 })
 
@@ -181,7 +207,8 @@ test('a render loss in an included file names that file', async () => {
     writeFileSync(child, 'A [bad](javascript:x) link.\n')
     const warnings = await warningsFor({ includeRoot: root }, '[top](javascript:y)\n\n{{ child.crv }}\n', join(root, 'index.crv'))
     assert.deepEqual(warnings, [
-      'Blanked a denied destination scheme [destination-denied] (line 1, column 1)',
+      // C2-A-173 locates the URL field of the top-level link.
+      'Blanked a denied destination scheme [destination-denied] (line 1, column 7)',
       `Blanked a denied destination scheme [destination-denied] (${child}, line 1, column 3)`,
     ])
   } finally {

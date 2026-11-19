@@ -35,10 +35,9 @@ test('an exact cross-reference still resolves and clones the target text', async
   assert.match(code, /href=\\"#Alpha-Beta\\">Alpha Beta/)
 })
 
-test('an include renames every colliding id, not only a heading id', async () => {
-  // Engine 0.1.7 emitted three elements carrying id="dup" from one included
-  // file, which is invalid HTML and makes the anchors collide. 0.1.10 renames
-  // each later copy and reports every rename, so the plugin's warnings grow.
+test('C2-N-057 and C2-N-058 keep authored ids and report duplicates', async () => {
+  // Carve 0.2 keeps every authored spelling and reports duplicate-id. This
+  // replaces the 0.1 include-id-rename behavior, per the upgrading guide.
   const root = mkdtempSync(join(tmpdir(), 'vite-carve-collide-'))
   try {
     mkdirSync(join(root, 'pages'))
@@ -53,9 +52,8 @@ test('an include renames every colliding id, not only a heading id', async () =>
     )
 
     const ids = [...code.matchAll(/id=\\"([^\\"]+)\\"/g)].map((match) => match[1])
-    assert.deepEqual(new Set(ids).size, ids.length, `duplicate ids emitted: ${ids.join(', ')}`)
-    assert.ok(ids.includes('dup-2'), `expected a renamed id, got: ${ids.join(', ')}`)
-    assert.deepEqual(warnings.filter((message) => /Id "dup" was renamed/.test(message)).length, 2)
+    assert.deepEqual(ids, ['dup', 'sec', 'dup', 'sec', 'dup'])
+    assert.equal(warnings.filter((message) => message.includes('[duplicate-id]')).length, 2)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -75,7 +73,8 @@ test('a blanked destination scheme reaches the Vite log', async () => {
 
     assert.match(code, /href=\\"\\"/)
     assert.deepEqual(warnings, [
-      'Blanked a denied destination scheme [destination-denied] (line 1, column 1)',
+      // C2-A-173 locates the URL field, not the whole link.
+      'Blanked a denied destination scheme [destination-denied] (line 1, column 5)',
     ])
   }
 })
