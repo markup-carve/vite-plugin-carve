@@ -9,8 +9,8 @@ import {
   type IncludeResolver,
   type LintOptions,
   type RenderOptions,
-} from '@markup-carve/carve/v2'
-import { fileSystemResolver } from '@markup-carve/carve/v2/node'
+} from '@markup-carve/carve'
+import { fileSystemResolver } from '@markup-carve/carve/node'
 import type { Plugin } from 'vite'
 
 export interface CarvePluginOptions {
