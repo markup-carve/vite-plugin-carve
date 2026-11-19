@@ -1,9 +1,7 @@
 import { realpathSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve as resolvePath, sep } from 'node:path'
 import {
-  includeDependencies,
   lint,
-  parse,
   renderWithDiagnostics,
   type Diagnostic,
   type IncludeAnswer,
@@ -82,9 +80,11 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
       if (options.includes ?? true) {
         const root = options.includeRoot ?? projectRoot ?? dirname(documentPath)
         if (!isAbsolute(root)) throw new Error('includeRoot must be an absolute path')
-        canonicalRoot = realpathSync(root)
-        const resolver = fileSystemResolver(canonicalRoot)
+        const absoluteRoot = realpathSync(root)
+        canonicalRoot = absoluteRoot
+        const resolver = fileSystemResolver(absoluteRoot)
         const answers = new Map<string, IncludeAnswer>()
+        const watched = new Set<string>()
         const recorded: IncludeResolver = (request) => {
           const key = JSON.stringify(request)
           let answer = answers.get(key)
@@ -92,21 +92,20 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
             answer = resolver(request)
             answers.set(key, answer)
           }
-          if ('text' in answer) sources.set(answer.id, answer.text)
+          if ('text' in answer) {
+            sources.set(answer.id, answer.text)
+            const file = resolvePath(absoluteRoot, answer.id)
+            if (!watched.has(file)) {
+              watched.add(file)
+              this.addWatchFile(file)
+            }
+          }
           return answer
         }
-        includes = { resolver: recorded, file: relative(canonicalRoot, documentPath).split(sep).join('/') }
+        includes = { resolver: recorded, file: relative(absoluteRoot, documentPath).split(sep).join('/') }
       }
 
       const renderOptions = options.render ?? {}
-      const document = parse(source, {
-        includes,
-        extensions: renderOptions.extensions,
-        headingIds: renderOptions.headingIds,
-      })
-      for (const dependency of includeDependencies(document)) {
-        if (dependency.read && dependency.file && canonicalRoot) this.addWatchFile(resolvePath(canonicalRoot, dependency.file))
-      }
       const rendered = renderWithDiagnostics(source, { ...renderOptions, includes })
       const seen = new Set<string>()
       const report = (entry: Diagnostic) => {
