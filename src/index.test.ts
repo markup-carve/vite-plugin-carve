@@ -143,6 +143,11 @@ test('reports lint findings as warnings when lint is enabled', async () => {
   assert.match(warnings[0] ?? '', /\[broken-fragment-link\] \(line 1, column 5\)$/)
 })
 
+test('a carve-lint-disable-next-line comment silences the finding on the next line', async () => {
+  const source = '%% carve-lint-disable-next-line broken-fragment-link\nSee [x](#nope).\n'
+  assert.deepEqual(await warningsFor({ lint: true, includes: false }, source, '/tmp/example.crv'), [])
+})
+
 test('does not lint by default', async () => {
   const warnings = await warningsFor({ includes: false }, 'See [x](#nope).\n', '/tmp/example.crv')
   assert.deepEqual(warnings, [])

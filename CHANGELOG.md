@@ -16,8 +16,9 @@ entry of their own.
 - `render` accepts Carve 0.2 HTML options. The engine keeps raw HTML disabled
   and unsafe URL schemes denied by default.
 - Installing this branch needs git while the 0.2 engine is unreleased.
-- Engine: pinned to the renamed carve-js `next2` (11de2ad), which ships 0.2 at
-  the package root and `@markup-carve/carve/node`; the old `/v2` entries are gone.
+- Engine: pinned to carve-js `next2` at `eb2ffc1`, the Milestone 6 engine,
+  which ships 0.2 at the package root and `@markup-carve/carve/node`; the old
+  `/v2` entries are gone.
 
 ## 0.1.4 - 2026-11-12
 
