@@ -1,70 +1,67 @@
-import { dirname as dirnamePath, resolve as resolvePath } from 'node:path'
+import { realpathSync } from 'node:fs'
+import { dirname, isAbsolute, relative, resolve as resolvePath, sep } from 'node:path'
 import {
-  carveToHtmlWithReport,
-  expandIncludes,
-  lintCarve,
-  parse,
-  renderDocumentWithReport,
-  resolve,
+  lint,
+  renderWithDiagnostics,
+  type Diagnostic,
+  type IncludeAnswer,
+  type IncludeConfig,
+  type IncludeResolver,
+  type LintOptions,
   type RenderOptions,
-  type ParseOptions,
-  type RenderResult,
-  type LintWarning,
 } from '@markup-carve/carve'
 import { fileSystemResolver } from '@markup-carve/carve/node'
 import type { Plugin } from 'vite'
 
 export interface CarvePluginOptions {
   include?: RegExp
-  render?: ParseOptions & RenderOptions
-  /** Resolve `{{ path }}` directives. Enabled for file-backed modules by default. */
+  /** Options of the Carve 0.2 HTML renderer. Include resolution is configured below. */
+  render?: Omit<RenderOptions, 'includes'>
+  /** Resolve include directives. Enabled for file-backed modules by default. */
   includes?: boolean
-  /** Include containment root. Defaults to Vite's project root. */
+  /** Absolute include containment root. Defaults to Vite's project root. */
   includeRoot?: string
-  /** Report `lintCarve` findings as Vite warnings. Off by default. */
+  /** Report Carve 0.2 lint findings as Vite warnings. Off by default. */
   lint?: boolean | CarveLintOptions
 }
 
 export interface CarveLintOptions {
-  /** Also report advisory `Hint` findings, such as a non-canonical thematic break. */
+  /** Also report advisory hint findings. */
   hints?: boolean
-  /** Opt-in authoring rules to run in addition to the defaults. */
+  /** Opt-in rules to run in addition to the defaults. */
   enabledRules?: readonly string[]
 }
 
 const DEFAULT_INCLUDE = /\.crv$/
 
-/**
- * A render loss is the engine saying it dropped something the author wrote - a
- * blanked `javascript:` destination, a flattened ruby annotation, a raw block
- * for another format. Without this the output just quietly lacks it.
- */
-function report(ctx: { warn: (message: string) => void }, result: RenderResult, documentPath: string): string {
-  for (const loss of result.losses) {
-    // A loss in included content carries the file its position is in.
-    const file = loss.file && loss.file !== documentPath ? `${loss.file}, ` : ''
-    const at = loss.pos ? ` (${file}line ${loss.pos.startLine}, column ${loss.pos.startColumn})` : ''
-    ctx.warn(`${loss.message} [${loss.code}]${at}`)
+function location(source: string | Uint8Array, offset: number): string {
+  const bytes = typeof source === 'string' ? Buffer.from(source) : source
+  const end = Math.min(Math.max(offset, 0), bytes.length)
+  let start = 0
+  let line = 1
+  for (let at = 0; at < end; at++) {
+    if (bytes[at] === 10) {
+      line++
+      start = at + 1
+    }
   }
-  if (result.truncated) {
-    ctx.warn(`${result.totalLosses} render losses in total; the rest were not reported`)
-  }
-  return result.value
+  const column = Array.from(new TextDecoder().decode(bytes.subarray(start, end))).length + 1
+  return `line ${line}, column ${column}`
 }
 
-type Located = Pick<LintWarning, 'message' | 'rule' | 'line' | 'column' | 'file'>
+function warning(entry: Diagnostic, documentPath: string, root: string | undefined, sources: Map<string, string | Uint8Array>): string {
+  const file = entry.file && root ? `${resolvePath(root, entry.file)}, ` : ''
+  const source = entry.file ? sources.get(entry.file) : sources.get(documentPath)
+  const at = entry.range && source !== undefined ? ` (${file}${location(source, entry.range.startOffset)})` : ''
+  return `${entry.message} [${entry.code}]${at}`
+}
 
-/** Names the file only when the finding is not in the document being imported. */
-function located(warning: Located, documentPath: string): string {
-  const file = warning.file && warning.file !== documentPath ? `${warning.file}, ` : ''
-  return `${warning.message} [${warning.rule}] (${file}line ${warning.line}, column ${warning.column})`
+function diagnosticKey(entry: Diagnostic): string {
+  return `${entry.file ?? ''}\0${entry.code}\0${entry.range?.startOffset ?? ''}\0${entry.message}`
 }
 
 export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
   const include = options.include ?? DEFAULT_INCLUDE
-  // Undefined until Vite resolves its config, so a transform that somehow runs
-  // first falls back to the document's own directory rather than to the process
-  // working directory, which I10 forbids as a containment root.
   let projectRoot: string | undefined
 
   return {
@@ -77,44 +74,62 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
       const [filename] = id.split('?', 1)
       if (!filename || !include.test(filename)) return null
       const documentPath = resolvePath(filename)
-
-      let html: string
-      const reported = new Set<string>()
-      let lintIncludes: NonNullable<Parameters<typeof lintCarve>[1]>['includes']
+      const sources = new Map<string, string | Uint8Array>([[documentPath, source]])
+      let includes: IncludeConfig | undefined
+      let canonicalRoot: string | undefined
       if (options.includes ?? true) {
-        // A configured root reaches the resolver unchanged, so its absolute-path
-        // refusal (PART 9 section 19, I10) still fires. Resolving it here would
-        // root containment at the process working directory instead.
-        const root = options.includeRoot ?? projectRoot ?? dirnamePath(resolvePath(filename))
-        lintIncludes = { resolve: fileSystemResolver(root), sourcePath: documentPath }
-        const expanded = expandIncludes(parse(source, { ...options.render, positions: true }), source, {
-          ...lintIncludes,
-          extensions: options.render?.extensions,
-        })
-        for (const dependency of expanded.dependencies) {
-          if (dependency.resolved) this.addWatchFile(dependency.id)
+        const root = options.includeRoot ?? projectRoot ?? dirname(documentPath)
+        if (!isAbsolute(root)) throw new Error('includeRoot must be an absolute path')
+        const absoluteRoot = realpathSync(root)
+        canonicalRoot = absoluteRoot
+        const resolver = fileSystemResolver(absoluteRoot)
+        const answers = new Map<string, IncludeAnswer>()
+        const watched = new Set<string>()
+        const recorded: IncludeResolver = (request) => {
+          const key = JSON.stringify(request)
+          let answer = answers.get(key)
+          if (answer === undefined) {
+            answer = resolver(request)
+            answers.set(key, answer)
+          }
+          if ('text' in answer) {
+            sources.set(answer.id, answer.text)
+            const file = resolvePath(absoluteRoot, answer.id)
+            if (!watched.has(file)) {
+              watched.add(file)
+              this.addWatchFile(file)
+            }
+          }
+          return answer
         }
-        for (const warning of expanded.warnings) {
-          reported.add(`${warning.rule}\0${warning.message}`)
-          this.warn(located(warning, documentPath))
+        includes = { resolver: recorded, file: relative(absoluteRoot, documentPath).split(sep).join('/') }
+      }
+
+      const renderOptions = options.render ?? {}
+      const rendered = renderWithDiagnostics(source, { ...renderOptions, includes })
+      const seen = new Set<string>()
+      const report = (entry: Diagnostic) => {
+        const key = diagnosticKey(entry)
+        if (!seen.has(key)) {
+          seen.add(key)
+          this.warn(warning(entry, documentPath, canonicalRoot, sources))
         }
-        html = report(this, renderDocumentWithReport(resolve(expanded.doc), options.render ?? {}), documentPath)
-      } else {
-        html = report(this, carveToHtmlWithReport(source, options.render ?? {}), documentPath)
+      }
+      for (const entry of rendered.diagnostics) {
+        report(entry)
+      }
+      if (rendered.suppressedDiagnostics) {
+        this.warn(`${rendered.suppressedDiagnostics} include diagnostics were not reported`)
       }
       if (options.lint) {
-        const lint = options.lint === true ? {} : options.lint
-        const findings = lintCarve(source, {
-          includes: lintIncludes,
-          extensions: options.render?.extensions,
-          enabledRules: lint.enabledRules,
-        })
-        for (const finding of findings) {
-          if (finding.severity === 'Hint' && !lint.hints) continue
-          // Include failures were already reported by the expansion above.
-          if (!reported.has(`${finding.rule}\0${finding.message}`)) this.warn(located(finding, documentPath))
+        const selected = options.lint === true ? {} : options.lint
+        const rules = Object.fromEntries((selected.enabledRules ?? []).map((name) => [name, 'on'])) as LintOptions['rules']
+        for (const entry of lint(source, { includes, extensions: renderOptions.extensions, rules })) {
+          if (entry.severity === 'hint' && !selected.hints) continue
+          report(entry)
         }
       }
+      const html = rendered.html
       return {
         code: [
           `export const source = ${JSON.stringify(source)};`,
