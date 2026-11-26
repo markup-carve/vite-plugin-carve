@@ -20,9 +20,9 @@ The default export is rendered HTML. Named exports:
 - `html`
 - `source`
 
-This `next2` branch uses the unreleased Carve 0.2 engine. The import path and
+The `main` branch uses the unreleased Carve 0.2 engine. The import path and
 the `html` and `source` exports stay the same. The engine is pinned to one
-commit of its `next2` branch, so installing this branch needs git and builds
+commit of its `main` branch, so installing this branch needs git and builds
 the engine from that commit.
 
 File-backed modules expand `{{ path }}` directives by default. Paths resolve
