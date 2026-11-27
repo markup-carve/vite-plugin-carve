@@ -6,19 +6,19 @@ Rendering is done by the Carve engine (`@markup-carve/carve`), so an engine
 change can alter output with no plugin diff. Engine bumps therefore get an
 entry of their own.
 
-## Unreleased (0.2)
+## Unreleased
 
-### Changed
+## 0.2.0 - 2026-11-27
+
+### Breaking
 
 - The plugin uses the public Carve 0.2 parser, include resolver, HTML renderer,
-  and lint API from a pinned `next2` engine commit. Include dependencies remain
-  watched by Vite, and diagnostics retain their file and source location.
+  and lint API, so `.crv` files are read as Carve 0.2. Include dependencies
+  remain watched by Vite, and diagnostics retain their file and source
+  location (#42).
 - `render` accepts Carve 0.2 HTML options. The engine keeps raw HTML disabled
-  and unsafe URL schemes denied by default.
-- Installing this branch needs git while the 0.2 engine is unreleased.
-- Engine: pinned to carve-js `next2` at `eb2ffc1`, the Milestone 6 engine,
-  which ships 0.2 at the package root and `@markup-carve/carve/node`; the old
-  `/v2` entries are gone.
+  and unsafe URL schemes denied by default (#42).
+- Engine: requires the Carve 0.2 engine (`@markup-carve/carve` 0.2).
 
 ## 0.1.4 - 2026-11-12
 
