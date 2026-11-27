@@ -28,6 +28,8 @@ export interface CarvePluginOptions {
 export interface CarveLintOptions {
   /** Also report advisory hint findings. */
   hints?: boolean
+  /** Include Carve 0.1 migration notices when linting Carve 0.2 documents. */
+  upgrade?: boolean
   /** Opt-in rules to run in addition to the defaults. */
   enabledRules?: readonly string[]
 }
@@ -124,7 +126,7 @@ export default function carvePlugin(options: CarvePluginOptions = {}): Plugin {
       if (options.lint) {
         const selected = options.lint === true ? {} : options.lint
         const rules = Object.fromEntries((selected.enabledRules ?? []).map((name) => [name, 'on'])) as LintOptions['rules']
-        for (const entry of lint(source, { includes, extensions: renderOptions.extensions, rules })) {
+        for (const entry of lint(source, { includes, extensions: renderOptions.extensions, rules, upgrade: selected.upgrade })) {
           if (entry.severity === 'hint' && !selected.hints) continue
           report(entry)
         }

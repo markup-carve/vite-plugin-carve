@@ -69,11 +69,12 @@ lint findings. Findings in included files name that file:
 carve({ lint: true })
 ```
 
-Advisory `Hint` findings, such as a thematic break not written `***`, are left
-out. Pass an object to turn them on or to run opt-in rules:
+Advisory `Hint` findings are left out. Set `hints: true` to report them.
+Carve 0.2 keeps migration notices such as `thematic-break-spelling` off by
+default; set `upgrade: true` to include them:
 
 ```ts
-carve({ lint: { hints: true, enabledRules: ['non-descriptive-link-text'] } })
+carve({ lint: { hints: true, upgrade: true } })
 ```
 
 A `%% carve-lint-disable-next-line <rule>` comment in the document silences a

@@ -191,7 +191,12 @@ test('an include warning names the included file it arose in', async () => {
 test('leaves lint hints out unless they are asked for', async () => {
   const source = 'Text.\n\n---\n\nMore.\n'
   assert.deepEqual(await warningsFor({ lint: true, includes: false }, source, '/tmp/example.crv'), [])
-  assert.deepEqual(await warningsFor({ lint: { hints: true }, includes: false }, source, '/tmp/example.crv'), [
+  assert.deepEqual(await warningsFor({ lint: { hints: true }, includes: false }, source, '/tmp/example.crv'), [])
+})
+
+test('reports upgrade-only lint hints when their rule is enabled', async () => {
+  const source = 'Text.\n\n---\n\nMore.\n'
+  assert.deepEqual(await warningsFor({ lint: { hints: true, upgrade: true }, includes: false }, source, '/tmp/example.crv'), [
     // U-044 and C2-B-160: hyphens are text in 0.2.
     'This line of "---" is text in Carve 0.2. Write "***" for a thematic break. [thematic-break-spelling] (line 3, column 1)',
   ])
